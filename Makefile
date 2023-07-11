@@ -29,7 +29,7 @@ GITEA_IMAGE        ?= $(GITEA_IMAGE0)
 GITEA_VER          ?= $(GITEA_VER0)
 
 #- Gitea admin user name
-GITEA_ADMIN_NAME   ?= dcapeadmin
+GITEA_ADMIN_NAME   ?= $(DCAPE_ADMIN_USER)
 #- Gitea admin user email
 GITEA_ADMIN_EMAIL  ?= $(GITEA_ADMIN_NAME)@$(DCAPE_DOMAIN)
 #- Gitea admin user password
@@ -136,6 +136,16 @@ mydb: DB_INIT_SQL=
 mydb: db-create
 
 setup: mydb $(DCAPE_VAR)/gitea-app-data $(DCAPE_VAR)/gitea/gitea/conf/app.ini
+	$(MAKE) -s up-vcs
+	$(MAKE) -s vcs-wait
+	$(MAKE) -s gitea-admin
+	$(MAKE) -s token
+
+# Ждем пока развернется gitea
+# как вариант - появится таблица user
+vcs-wait:
+	@echo "Waiting for VCS bootstrap..."
+	sleep 10
 
 $(DCAPE_VAR)/gitea/gitea/conf/app.ini: $(DCAPE_VAR)/gitea/gitea/conf
 	@echo "$$INI_GITEA" > $@
@@ -154,49 +164,11 @@ $(DCAPE_VAR)/gitea-app-data:
 # setup gitea objects
 
 GITEA_CREATE_TOKEN_URL = $(AUTH_URL)/api/v1/users/$(GITEA_ADMIN_NAME)/tokens
-GITEA_ORG_CREATE_URL = $(AUTH_URL)/api/v1/admin/users/$(GITEA_ADMIN_NAME)/orgs
-APP_CREATE_URL       = $(AUTH_URL)/api/v1/user/applications/oauth2
 
 # Create gitea admin user
 gitea-admin:
-	@$(MAKE) -s dc CMD="exec gitea su git -c \
+	@$(MAKE) -s dc CMD="exec vcs su git -c \
 	  'gitea admin user create --admin --username $(GITEA_ADMIN_NAME) --password $(GITEA_ADMIN_PASS) --email $(GITEA_ADMIN_EMAIL)'"
-
-
-define GITEA_ORG_CREATE
-{
-  "username": "$(NARRA_GITEA_ORG)",
-  "visibility": "limited",
-  "repo_admin_change_team_access": true
-}
-endef
-
-define NARRA_APP_CREATE
-{
-  "name": "$(DCAPE_HOST)",
-  "confidential_client": true,
-  "redirect_uris": [ "$(DCAPE_SCHEME)://$(DCAPE_HOST)/login" ]
-}
-endef
-
-define CICD_APP_CREATE
-{
-  "name": "$(CICD_HOST)",
-  "confidential_client": true,
-  "redirect_uris": [ "$(DCAPE_SCHEME)://$(CICD_HOST)/authorize" ]
-}
-endef
-
-define POST_CMD_PRE
- -H "Accept: application/json" \
- -H "Content-Type: application/json" \
- -H "Authorization: token $(TOKEN)"
-endef
-
-define POST_CMD
- $(POST_CMD_PRE) \
- -H "Sudo: $(NARRA_GITEA_ORG)"
-endef
 
 TOKEN_NAME ?= install
 
@@ -210,23 +182,27 @@ define GITEA_TOKEN_CREATE
 }
 endef
 
-ifeq ($(TOKEN),)
-gitea-setup: token-fetch
-else
-gitea-setup: token-use
-endif
+token: $(DCAPE_VAR)/oauth2-token
 
-token-fetch:
+$(DCAPE_VAR)/oauth2-token:
 	@echo -n "create token... " ; \
+	echo "USER: $(GITEA_ADMIN_NAME)" ; \
+	echo "URL: $(GITEA_CREATE_TOKEN_URL)" ; \
+	echo "POST: $$GITEA_TOKEN_CREATE" ; \
 	if resp=$$(echo $$GITEA_TOKEN_CREATE | curl -gsS -X POST -d @- -H "Content-Type: application/json" -u "$(GITEA_ADMIN_NAME):$(GITEA_ADMIN_PASS)" $(GITEA_CREATE_TOKEN_URL)) ; then \
 	  if token=$$(echo $$resp | jq -re '.sha1') ; then \
 	    echo "Token $$token: Done" ; \
+	    echo "define TOKEN" > $@ ;\
+	    echo "$$token" >> $@ ; \
+	    echo "endef" >> $@ ; \
 	  else \
 	    echo -n "ERROR: " ; \
 	    echo $$resp | jq -re '.' ; \
 	  fi ; \
 	else false ; fi ; \
-	$(MAKE) -s token-use TOKEN=$$token ; \
+
+
+token-delete:
 	echo -n "remove token... " ; \
 	if resp=$$(curl -gsS -X DELETE -u "$(GITEA_ADMIN_NAME):$(GITEA_ADMIN_PASS)" $(GITEA_CREATE_TOKEN_URL)/$(TOKEN_NAME)) ; then \
 	  if [[ -z $$resp ]] ; then \
@@ -237,35 +213,3 @@ token-fetch:
 	  fi ; \
 	else false ; fi
 
-## create gitea org and oauth2 applications
-token-use:
-	@echo "*** $@ ***"
-	@if [[ -z "$(TOKEN)" ]] ; then echo >&2 "TOKEN arg must be defined" ; false ; fi
-	@echo "Auth server: $(AUTH_URL)"
-	@echo "CICD admin:  $(CICD_ADMIN)"
-	@echo "Gitea org:   $(NARRA_GITEA_ORG)"
-	@echo "Token:       $(TOKEN)"
-	@echo -n "create org... " ; \
-	if resp=$$(echo $$GITEA_ORG_CREATE | curl -gsS -X POST $(GITEA_ORG_CREATE_URL) $(POST_CMD_PRE) -d @-) ; then \
-	  if echo $$resp | jq -re '.id' > /dev/null ; then \
-	    echo "Org $(NARRA_GITEA_ORG): Done" ; \
-	  else \
-	    echo -n "ERROR: " ; \
-	    echo $$resp | jq -re '.message' ; \
-	  fi ; \
-	else false ; fi
-	@echo -n "create narra app..." ; \
-	if resp=$$(echo $$NARRA_APP_CREATE | curl -gsS -X POST $(APP_CREATE_URL) $(POST_CMD) -d @-) ; then \
-	  client_id=$$(echo $$resp | jq -r '.client_id') ; \
-	  client_secret=$$(echo $$resp | jq -r '.client_secret') ; \
-	  sed -i "s/^\(NARRA_CLIENT_ID=\).*/\1$$client_id/ ; s/^\(NARRA_CLIENT_KEY=\).*/\1$$client_secret/ " $(CFG) ; \
-	  echo " Done" ; \
-	else false ; fi
-	@echo -n "create CICD app..." ; \
-	if resp=$$(echo $$CICD_APP_CREATE | curl -gsS -X POST $(APP_CREATE_URL) $(POST_CMD) -d @-) ; then \
-	  client_id=$$(echo $$resp | jq -r '.client_id') ; \
-	  client_secret=$$(echo $$resp | jq -r '.client_secret') ; \
-	  sed -i "s/^\(CICD_GITEA_CLIENT_ID=\).*/\1$$client_id/ ; s/^\(CICD_GITEA_CLIENT_KEY=\).*/\1$$client_secret/ " $(CFG) ; \
-	  echo " Done" ; \
-	else false ; fi
-	@echo "Gitea setup complete, do reup"
