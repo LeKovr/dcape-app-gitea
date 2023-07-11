@@ -1,7 +1,7 @@
 # Gitea init Makefile
 # This file included by ../../Makefile
 SHELL               = /bin/bash
-CFG              ?= .env
+CFG                ?= .env
 
 # Docker image and version tested for actual dcape release
 GITEA_IMAGE0       ?= gitea/gitea
@@ -36,7 +36,7 @@ GITEA_ADMIN_EMAIL  ?= $(GITEA_ADMIN_NAME)@$(DCAPE_DOMAIN)
 GITEA_ADMIN_PASS   ?= $(shell openssl rand -hex 16; echo)
 
 #- Gitea mailer enabled
-GITEA_MAILER_ENABLED   ?= false
+GITEA_MAILER_ENABLED  ?= false
 #- Gitea mailer ip
 GITEA_MAILER_ADDR     ?=
 #- Gitea mailer port
@@ -48,8 +48,11 @@ GITEA_MAILER_USER     ?=
 #- Gitea mailer password
 GITEA_MAILER_PASS     ?=
 
-NAME ?= GITEA
-DB_INIT_SQL =
+#- dcape root directory
+DCAPE_ROOT         ?= $(DCAPE_ROOT)
+
+NAME               ?= GITEA
+DB_INIT_SQL         =
 
 -include $(CFG)
 export
@@ -60,8 +63,6 @@ include $(DCAPE_ROOT)/Makefile.dcape
 else
 include $(DCAPE_ROOT)/Makefile.app
 endif
-
-#make dc CMD="run gitea gitea generate secret INTERNAL_TOKEN"
 
 # ------------------------------------------------------------------------------
 
@@ -131,14 +132,10 @@ init:
 	@echo "  URL: $(AUTH_URL)"
 	@echo "  SSH port: $(GITEA_SSH_PORT)"
 
-mydb: NAME=GITEA
-mydb: DB_INIT_SQL=
-mydb: db-create
-
-setup: mydb $(DCAPE_VAR)/gitea-app-data $(DCAPE_VAR)/gitea/gitea/conf/app.ini
+setup: db-create $(DCAPE_VAR)/gitea-app-data $(DCAPE_VAR)/gitea/gitea/conf/app.ini
 	$(MAKE) -s up-vcs
 	$(MAKE) -s vcs-wait
-	$(MAKE) -s gitea-admin
+	$(MAKE) -s gitea-admin || true
 	$(MAKE) -s token
 
 # Ждем пока развернется gitea
