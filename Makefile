@@ -58,7 +58,6 @@ DB_INIT_SQL         =
 export
 
 ifdef DCAPE_STACK
-include $(DCAPE_ROOT)/$(CFG)
 include $(DCAPE_ROOT)/Makefile.dcape
 else
 include $(DCAPE_ROOT)/Makefile.app
@@ -122,7 +121,7 @@ export INI_GITEA
 
 # ------------------------------------------------------------------------------
 
-init:
+init: $(DCAPE_VAR)/gitea-app-data $(DCAPE_VAR)/gitea/gitea/conf/app.ini
 	@if [[ "$$GITEA_VER0" != "$$GITEA_VER" ]] ; then \
 	  echo "Warning: GITEA_VER in dcape ($$GITEA_VER0) differs from yours ($$GITEA_VER)" ; \
 	fi
@@ -132,8 +131,11 @@ init:
 	@echo "  URL: $(AUTH_URL)"
 	@echo "  SSH port: $(GITEA_SSH_PORT)"
 
-setup: db-create $(DCAPE_VAR)/gitea-app-data $(DCAPE_VAR)/gitea/gitea/conf/app.ini
-	$(MAKE) -s up-vcs
+.setup-before-up: db-create
+
+.setup-after-up: setup-users
+
+setup-users:
 	$(MAKE) -s vcs-wait
 	$(MAKE) -s gitea-admin || true
 	$(MAKE) -s token
@@ -164,7 +166,8 @@ GITEA_CREATE_TOKEN_URL = $(AUTH_URL)/api/v1/users/$(GITEA_ADMIN_NAME)/tokens
 
 # Create gitea admin user
 gitea-admin:
-	@$(MAKE) -s dc CMD="exec vcs su git -c \
+	@echo "*** $@ ***"
+	@$(MAKE) -s compose CMD="exec vcs su git -c \
 	  'gitea admin user create --admin --username $(GITEA_ADMIN_NAME) --password $(GITEA_ADMIN_PASS) --email $(GITEA_ADMIN_EMAIL)'"
 
 TOKEN_NAME ?= install
@@ -182,10 +185,7 @@ endef
 token: $(DCAPE_VAR)/oauth2-token
 
 $(DCAPE_VAR)/oauth2-token:
-	@echo -n "create token... " ; \
-	echo "USER: $(GITEA_ADMIN_NAME)" ; \
-	echo "URL: $(GITEA_CREATE_TOKEN_URL)" ; \
-	echo "POST: $$GITEA_TOKEN_CREATE" ; \
+	@echo -n "create token for user $(GITEA_ADMIN_NAME)... " ; \
 	if resp=$$(echo $$GITEA_TOKEN_CREATE | curl -gsS -X POST -d @- -H "Content-Type: application/json" -u "$(GITEA_ADMIN_NAME):$(GITEA_ADMIN_PASS)" $(GITEA_CREATE_TOKEN_URL)) ; then \
 	  if token=$$(echo $$resp | jq -re '.sha1') ; then \
 	    echo "Token $$token: Done" ; \
@@ -197,7 +197,6 @@ $(DCAPE_VAR)/oauth2-token:
 	    echo $$resp | jq -re '.' ; \
 	  fi ; \
 	else false ; fi ; \
-
 
 token-delete:
 	echo -n "remove token... " ; \
