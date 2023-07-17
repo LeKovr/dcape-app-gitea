@@ -185,7 +185,7 @@ endef
 token: $(DCAPE_VAR)/oauth2-token
 
 $(DCAPE_VAR)/oauth2-token:
-	@echo -n "create token for user $(GITEA_ADMIN_NAME)... " ; \
+	@echo -n "create token for user $(GITEA_ADMIN_NAME) via $(AUTH_URL)... " ; \
 	if resp=$$(echo $$GITEA_TOKEN_CREATE | curl -gsS -X POST -d @- -H "Content-Type: application/json" -u "$(GITEA_ADMIN_NAME):$(GITEA_ADMIN_PASS)" $(GITEA_CREATE_TOKEN_URL)) ; then \
 	  if token=$$(echo $$resp | jq -re '.sha1') ; then \
 	    echo "Token $$token: Done" ; \
