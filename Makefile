@@ -189,7 +189,7 @@ $(DCAPE_VAR)/oauth2-token:
 	if resp=$$(echo $$GITEA_TOKEN_CREATE | curl -gsS -X POST -d @- -H "Content-Type: application/json" -u "$(GITEA_ADMIN_NAME):$(GITEA_ADMIN_PASS)" $(GITEA_CREATE_TOKEN_URL)) ; then \
 	  if token=$$(echo $$resp | jq -re '.sha1') ; then \
 	    echo "Token $$token: Done" ; \
-	    echo "define TOKEN" > $@ ;\
+	    echo "define AUTH_TOKEN" > $@ ;\
 	    echo "$$token" >> $@ ; \
 	    echo "endef" >> $@ ; \
 	  else \
@@ -208,4 +208,3 @@ token-delete:
 	    echo $$resp | jq -re '.message' ; \
 	  fi ; \
 	else false ; fi
-
