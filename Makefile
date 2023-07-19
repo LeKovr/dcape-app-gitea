@@ -1,5 +1,7 @@
-# Gitea init Makefile
-# This file included by ../../Makefile
+## Gitea Makefile.
+## Used with dcape at ../../
+#:
+
 SHELL               = /bin/bash
 CFG                ?= .env
 
@@ -53,6 +55,8 @@ DCAPE_ROOT         ?= $(DCAPE_ROOT)
 
 NAME               ?= GITEA
 DB_INIT_SQL         =
+
+# ------------------------------------------------------------------------------
 
 -include $(CFG)
 export
