@@ -102,6 +102,8 @@ NO_REPLY_ADDRESS                  = noreply.$(DCAPE_DOMAIN)
 
 [security]
 INSTALL_LOCK   = true
+REVERSE_PROXY_LIMIT = 1
+REVERSE_PROXY_TRUSTED_PROXIES = 100.127.0.0/24
 
 [picture]
 DISABLE_GRAVATAR        = false
