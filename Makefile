@@ -3,7 +3,7 @@
 #:
 
 SHELL               = /bin/bash
-CFG                ?= .env
+CFG                 = .env
 
 # Docker image and version tested for actual dcape release
 GITEA_IMAGE0       ?= gitea/gitea
@@ -55,6 +55,7 @@ DCAPE_ROOT         ?= $(DCAPE_ROOT)
 
 NAME               ?= GITEA
 DB_INIT_SQL         =
+RANDOM_STRING      ?= $(shell openssl rand -hex 16; echo)
 
 # ------------------------------------------------------------------------------
 
@@ -149,8 +150,12 @@ setup-users:
 # Ждем пока развернется gitea
 # как вариант - появится таблица user
 vcs-wait:
-	@echo "Waiting for VCS bootstrap..."
-	sleep 10
+	@url="$(AUTH_URL)/api/v1/repos/search?limit=1&q=$(RANDOM_STRING)" ; \
+	echo "Check url: $$url" ; \
+	echo "Waiting for VCS bootstrap (up + LE exchange)..." ; \
+	while [[ $$(curl -gSs "$$url") != '{"ok":true,"data":[]}' ]] ; do echo -n "." ; sleep 1 ; done
+	@echo "Done"
+
 
 $(DCAPE_VAR)/gitea/gitea/conf/app.ini: $(DCAPE_VAR)/gitea/gitea/conf
 	@echo "$$INI_GITEA" > $@
@@ -178,13 +183,14 @@ gitea-admin:
 
 TOKEN_NAME ?= install
 
+# pre 1.21:
 # sudo - create org
 # write:application - create application
 
 define GITEA_TOKEN_CREATE
 {
   "name": "$(TOKEN_NAME)",
-  "scopes": ["sudo", "write:application"]
+  "scopes": ["write:admin", "write:user"]
 }
 endef
 
@@ -193,6 +199,7 @@ token: $(DCAPE_VAR)/oauth2-token
 $(DCAPE_VAR)/oauth2-token:
 	@echo -n "create token for user $(GITEA_ADMIN_NAME) via $(AUTH_URL)... " ; \
 	if resp=$$(echo $$GITEA_TOKEN_CREATE | curl -gsS -X POST -d @- -H "Content-Type: application/json" -u "$(GITEA_ADMIN_NAME):$(GITEA_ADMIN_PASS)" $(GITEA_CREATE_TOKEN_URL)) ; then \
+	  [ -z $$DEBUG ] || echo ">>>> RESP:  $$resp" ; \
 	  if token=$$(echo $$resp | jq -re '.sha1') ; then \
 	    echo "Token $$token: Done" ; \
 	    echo "define AUTH_TOKEN" > $@ ;\
@@ -201,6 +208,7 @@ $(DCAPE_VAR)/oauth2-token:
 	  else \
 	    echo -n "ERROR: " ; \
 	    echo $$resp | jq -re '.' ; \
+	    echo "Response: $$resp" ; \
 	  fi ; \
 	else false ; fi ; \
 
@@ -212,5 +220,6 @@ token-delete:
 	  else \
 	    echo -n "ERROR: " ; \
 	    echo $$resp | jq -re '.message' ; \
+	    echo "Response: $$resp" ; \
 	  fi ; \
 	else false ; fi
