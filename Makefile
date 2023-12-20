@@ -7,7 +7,7 @@ CFG                ?= .env
 
 # Docker image and version tested for actual dcape release
 GITEA_IMAGE0       ?= gitea/gitea
-GITEA_VER0         ?= 1.19.3
+GITEA_VER0         ?= 1.21.2
 
 #- ******************************************************************************
 #- Gitea: general config
