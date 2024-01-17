@@ -22,6 +22,7 @@
       - USER_UID=1000
       - USER_GID=1000
       - DOMAIN=${GITEA_HOST}
+      - GITEA_WORK_DIR=/app/gitea
       - ROOT_URL=${DCAPE_SCHEME}://${GITEA_HOST}
       - GITEA__mailer__ENABLED=${GITEA_MAILER_ENABLED}
       - GITEA__mailer__SMTP_ADDR=${GITEA_MAILER_ADDR}
